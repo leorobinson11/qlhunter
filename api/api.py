@@ -1,95 +1,83 @@
-import json
-import re
-from threading import Thread
-import requests
 from flask import Flask, request
+from flask_cors import CORS
+from flask_caching import Cache
+
+from endpoint_finder import Endpoint_Finder, Subdomain_Finder
+from schema_discovery import Schema_parser
+
+from urllib.parse import urlparse
+import nmap3
+from glom import glom
+
+import subprocess
+import re
 from bs4 import BeautifulSoup
-
-class Endpoint_Finder:
-    def __init__(self) -> None:
-        pass
-
-    def subdomains(self, root) -> list:
-        # enumerating subdomains
-        res = requests.get(f"https://crt.sh/?q={root}")
-        soup = BeautifulSoup(res.text, "html.parser")
-
-        table = soup.find_all("table")[1]
-        rows = table.find_all("tr")
-        subdomains = []
-        for row in rows:
-            cells = row.find_all("td")
-            if len(cells) == 7:
-                subdomain = cells[4].text.replace('*.', '')
-                if root in subdomain and not subdomain in subdomains:
-                    subdomains.append(subdomain)
-        return subdomains
-
-    def query(self, url, query="") -> requests.Response:
-        # graphql query
-        res = requests.post(url, json={"query":query}, allow_redirects=False)
-        return res
-
-    def isGraphql(self, url) -> bool:
-        # Test if endpoint is graphql by its response to __typename query
-        res = self.query(url, "query{__typename}")
-        if res.status_code != 200:
-            return False
-        if not "application/json" in res.headers['content-type']:
-            return False
-        if bool(re.match(".+(data|errors|__schema|__typename).+", res.text)):
-            return True
-        else:
-            return False
+import requests
         
-    def sub_enumerate_endpoints(self, root, path):
-        #subfunction of enumerate endpoints function -> fead into threads
-        endpoint = f"https://{root.strip()}/{path.strip()}"
-        if self.isGraphql(f"https://{root.strip()}/{path.strip()}"):
-            self.endpoints.append(endpoint)
-    
-    def enumerate_endpoints(self, domain) -> list:
-        # finding graphql endpoints on root domain
-        self.endpoints = []
-        threads = []
-        # loading the posible graphql directories
-        with open("wordlists/directories.txt", "r") as file:
-            for path in file.readlines():
-                thread = Thread(target=self.sub_enumerate_endpoints, args=(domain, path, ))
-                thread.start()
-                threads.append(thread)
-        for thread in threads:
-            thread.join()
-        return self.endpoints
-    
-    def sub_enumerate_endpoints_for_all_subdomains(self, subdomain):
-        self.endpoints_map.update({
-                subdomain : self.enumerate_endpoints(subdomain)
-        })
-    
-    def enumerate_endpoints_for_all_subdomains(self, root) -> dict:
-        # finds all graphql endpoints of all subdomains of a rootdomain
-        self.endpoints_map = {}
-        threads = []
-        for subdomain in self.subdomains(root):
-            thread = Thread(target=self.sub_enumerate_endpoints_for_all_subdomains, args=(subdomain, ))
-            thread.start()
-            threads.append(thread)
-        for thread in threads:
-            thread.join()
-        return self.endpoints_map
-            
-        
+
+cache_config = {
+    "DEBUG": True,          
+    "CACHE_TYPE": "SimpleCache",  
+    "CACHE_DEFAULT_TIMEOUT": 300
+}
 
 app = Flask(__name__)
+CORS(app)
+app.config.from_mapping(cache_config)
+cache = Cache(app)
+
+@app.route('/api/fuzz')
+def fuzz():
+    pass
+
+@app.route('/api/info/vun-matrix')
+def vun_matrix():
+    url = "https://mcstg2.shopforcadbury.com/graphql"
+    fingerprint = str(subprocess.check_output(['python', 'tools/graphw00f/main.py', '-f', "-t", url]))
+    engine = re.search(r"GraphQL Engine: \((.+)\)", fingerprint).group(1)
+    attack_matrix_url = re.search(r"Attack Surface Matrix:\s+(https?://[^\s]+)", fingerprint).group(1)
+    path = "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/master/implementations/" + attack_matrix_url.split('/')[-1]
+    res = requests.get(path)
+    soup = BeautifulSoup(res.content, "html.parser")
+    vun_matrix_table, validations_table = soup.find_all("table")
+     
+    matrix = {}
+    rows = vun_matrix_table.find_all("tr")
+    for (key, value) in zip(rows[0].find_all("th"), rows[1].find_all("td")):
+        matrix.update({ key.text : value.text })
+
+    # add code for extracting validation table
+        
+    return {"engine": engine, "matrix":matrix}
+
+@app.route('/api/info/open-ports')
+def open_ports():
+    url = urlparse(request.args.get("url"))
+    nmap = nmap3.Nmap()
+    res = nmap.scan_top_ports(url.hostname)
+    ports = glom(res, '**.ports')[0]
+    open_ports = [{"port":port["portid"], "service":port["service"]["name"]} for port in ports if port["state"] == "open"]
+    return open_ports
+
+@app.route('/api/schema')
+@cache.cached(1000, query_string=True)
+def schema() -> dict:
+    #return {"query":"some test data"}
+    url = request.args.get("url")
+    parser = Schema_parser()
+    return parser.basic_introspection(url)
+
+@app.route('/api/subdomains')
+def Subdomains() -> list:
+    root = request.args.get("root")
+    parser = Subdomain_Finder()
+    return parser.enumerate_subdomains(root)
 
 @app.route('/api/endpoints')
-def Graphql_endpoints():
-    # fuzzing for valid graphql endpoints
-    # root domain
+def Graphql_endpoints() -> dict:
+    # returns graphql endpoints
+    #return {"graph.linktr.ee" : [r"\graphql"], "linktr.ee" : [r"\api\graphql", r"\api\v2\graphql"]} #  test dataset
     root = request.args.get("root")
-
     parser = Endpoint_Finder()
-    #endpoints = parser.enumerate_endpoints(root)
-    endpoints = parser.enumerate_endpoints_for_all_subdomains(root)
+    endpoints = {root:parser.enumerate_endpoints(root)}
     return endpoints
