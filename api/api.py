@@ -31,12 +31,14 @@ def fuzz():
     pass
 
 @app.route('/api/info/vun-matrix')
+@cache.cached(1000, query_string=True)
 def vun_matrix():
-    url = "https://mcstg2.shopforcadbury.com/graphql"
+    # move to seperate file
+    url = urlparse(request.args.get("url"))
     fingerprint = str(subprocess.check_output(['python', 'tools/graphw00f/main.py', '-f', "-t", url]))
     engine = re.search(r"GraphQL Engine: \((.+)\)", fingerprint).group(1)
-    attack_matrix_url = re.search(r"Attack Surface Matrix:\s+(https?://[^\s]+)", fingerprint).group(1)
-    path = "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/master/implementations/" + attack_matrix_url.split('/')[-1]
+    attack_matrix_url = re.search(r"Attack Surface Matrix:\s+https:.+(\/.+md)", fingerprint).group(1)
+    path = "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/master/implementations/" + attack_matrix_url
     res = requests.get(path)
     soup = BeautifulSoup(res.content, "html.parser")
     vun_matrix_table, validations_table = soup.find_all("table")
@@ -47,11 +49,11 @@ def vun_matrix():
         matrix.update({ key.text : value.text })
 
     # add code for extracting validation table
-        
     return {"engine": engine, "matrix":matrix}
 
 @app.route('/api/info/open-ports')
 def open_ports():
+    # move to seperate file
     url = urlparse(request.args.get("url"))
     nmap = nmap3.Nmap()
     res = nmap.scan_top_ports(url.hostname)

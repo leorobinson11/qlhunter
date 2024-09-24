@@ -45,32 +45,42 @@ const Sitemap = () => {
   const [data, setData] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  
+
   const getGraphql_endpoints = async () => {
     setLoading(true);
     setError(null);
 
-    try {
-      var inputbox = document.getElementById("rootdomain")
-      const root = inputbox.value;
-      inputbox.value = ""
-      const res = await fetch("http://127.0.0.1:5000/api/endpoints?" + new URLSearchParams({ "root":root }))
+    const checkbox = document.getElementById("enumerate-subdomains")
+    const inputbox = document.getElementById("rootdomain")
+    const root = inputbox.value;
+    inputbox.value = ""
 
-      if (!res.ok) {
-        throw new Error("Error trying to fetch data!")
+    var subdomains;
+
+    try {
+      if (checkbox.checked) {
+        const subdomains_req = await fetch("http://127.0.0.1:5000/api/subdomains?" + new URLSearchParams({ "root":root }))
+        subdomains = await subdomains_req.json()
+      } else {
+        subdomains = [root]
       }
 
-      const data = await res.json();
-
-      setData((prevData) => {
-        const updatedData = { ...prevData };
-        Object.keys(data).forEach(key => {
-          if (!updatedData[key]) {
-            updatedData[key] = data[key];
-          }
+      for (let subdomain of subdomains) {
+        const res = await fetch("http://127.0.0.1:5000/api/endpoints?" + new URLSearchParams({ "root":subdomain }))
+        if (!res.ok) {
+          throw new Error("Error fuzzing for graphql endpoints!")
+        }
+        const endpoints = await res.json();
+        setData((prevData) => {
+          const updatedData = { ...prevData };
+          Object.keys(endpoints).forEach(key => {
+            if (!updatedData[key]) {
+              updatedData[key] = data[key];
+            }
+          });
+          return updatedData;
         });
-        return updatedData;
-      });
+      }
 
     } catch (error) {
       setError(error);

@@ -11,7 +11,7 @@ const App = () => {
       </header>
       <main>
           <section>
-            <Sitemap /> 
+            <Sitemap />
           </section>
           <section>
             <Schema />
