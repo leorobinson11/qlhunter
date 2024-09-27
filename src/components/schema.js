@@ -123,10 +123,10 @@ const SugiyamaSort = (nodes, edges) => {
         const AvarageofIncommingNodes = (node) => {
             if (nodeIncomingEdges[node].length == 0) return 0;
             const nodeheights = nodeIncomingEdges[node].map(incommingnode => {
-                return incommingnode.height | AvarageofIncommingNodes(incommingnode)
+                return incommingnode.h | AvarageofIncommingNodes(incommingnode)
             })
             const avarage_height = nodeheights.reduce((partialSum, a) => partialSum + a, 0) / nodeIncomingEdges[node].length
-            node.height =  avarage_height
+            node.h =  avarage_height
             return avarage_height
         };
         
@@ -140,7 +140,7 @@ const SugiyamaSort = (nodes, edges) => {
                 });
             }
             layer_nodes.forEach((node,index) => {
-                node.height = index
+                node.h = index
             })
         })
         
@@ -149,7 +149,7 @@ const SugiyamaSort = (nodes, edges) => {
     const asignPositions = ( nodes ) => {
         nodes.forEach(node => {
             node.position.x = node.layer * 500
-            node.position.y = node.height * 200
+            node.position.y = node.h * 200
         })
     }
     
@@ -202,17 +202,9 @@ const schemaToGraph = (schema) => {
         };
     });
 
-    //nodes = SugiyamaSort(nodes, edges)
+    const sorted_nodes = SugiyamaSort(nodes, edges)
 
-    console.log(nodes)
-    console.log(edges)
-    
-    const sortedNodes = topologicalSort(nodes, edges);
-
-    nodes.forEach((node) => {
-        node.position.x = 600 * sortedNodes.indexOf(node.id)
-    });
-    return { nodes, edges };
+    return { sorted_nodes, edges };
 }
 
 
@@ -238,8 +230,8 @@ const Schema = () => {
                 throw new Error("Error trying to fetch data!")
             }
             const data = await res.json();
-            const { nodes, edges } = schemaToGraph(data);
-            setNodes(nodes);
+            const { sorted_nodes, edges } = schemaToGraph(data);
+            setNodes(sorted_nodes);
             setEdges(edges);
         } catch (error) {
             setError(error);
