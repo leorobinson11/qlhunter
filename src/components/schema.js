@@ -121,7 +121,7 @@ const SugiyamaSort = (nodes, edges) => {
         // arranging the nodes within the layers in a way that minimizes the crossings
         // nodes are sorted by the avarage x of the their incomming nodes
         const AvarageofIncommingNodes = (node) => {
-            if (nodeIncomingEdges[node].length == 0) return 0;
+            if (!nodeIncomingEdges[node] || nodeIncomingEdges[node].length == 0) return 0;
             const nodeheights = nodeIncomingEdges[node].map(incommingnode => {
                 return incommingnode.h | AvarageofIncommingNodes(incommingnode)
             })
@@ -158,7 +158,9 @@ const SugiyamaSort = (nodes, edges) => {
         nodeIncomingEdges[node.id] = []
     })
     edges.forEach(edge => {
-        nodeIncomingEdges[edge.target].push(nodes.find(node => node.id == edge.source))
+        if (nodeIncomingEdges[edge.target]) {
+            nodeIncomingEdges[edge.target].push(nodes.find(node => node.id == edge.source))
+        }
     })
     // asign layers
     const layers = CreateLayers(nodes, edges);
@@ -224,15 +226,20 @@ const Schema = () => {
         const url = inputbox.value;
         inputbox.value = ""
 
+
+        // move this back in to the try block
+        const res = await fetch("http://127.0.0.1:5000/api/schema?" + new URLSearchParams({ url:url }))
+        if (!res.ok) {
+            throw new Error("Error trying to fetch data!")
+        }
+        const data = await res.json();
+        const { sorted_nodes, edges } = schemaToGraph(data);
+        setNodes(sorted_nodes);
+        setEdges(edges);
+
+
         try {
-            const res = await fetch("http://127.0.0.1:5000/api/schema?" + new URLSearchParams({ url:url }))
-            if (!res.ok) {
-                throw new Error("Error trying to fetch data!")
-            }
-            const data = await res.json();
-            const { sorted_nodes, edges } = schemaToGraph(data);
-            setNodes(sorted_nodes);
-            setEdges(edges);
+
         } catch (error) {
             setError(error);
         } finally {
